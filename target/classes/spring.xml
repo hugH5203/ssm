@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:comtex="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:comte="http://www.springframework.org/schema/context"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/aop
+       http://www.springframework.org/schema/aop/spring-aop.xsd
+       http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <!--ssm的整合我觉得使用半注解半xml的方式更简单-->
+
+    <!--开启spring注解的扫描，只处理service与dao有关的注解，springMVC的controller注解不希望spring识别-->
+    <comtex:component-scan base-package="in2021winter.study">
+        <!--声明那些配置或注解不被spring扫描-->
+        <comtex:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+    </comtex:component-scan>
+
+    <!--spring整合mybatis-->
+    <!--spring+mybatis步骤1、配置连接池，这里我用spring自带的-->
+    <!--将数据源的参数写在类路径下的配置文件里，改参数只需要到配置文件里改，就不需要改源码了.-->
+    <comte:property-placeholder location="classpath:jdbcConfig.properties"></comte:property-placeholder>
+    <bean id="dataSource" class="${jdbc.dataSource}">
+        <property name="driverClassName" value="${jdbc.driver}"></property>
+        <property name="url" value="${jdbc.url}"></property>
+        <property name="username" value="${jdbc.username}"></property>
+        <property name="password" value="${jdbc.password}"></property>
+    </bean>
+
+    <!--spring+mybatis步骤2、配置SqlSessionFactory工厂，这样就可以将mybatis的接口代理对象存储到spring容器里了-->
+    <!--spring有一个包很厉害，只需要传入数据源就可以获得一个mybatis里的sqlSessionFactory,这个依赖是：mybatis-spring-->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"></property>
+    </bean>
+
+    <!--配置mybatis要扫描的接口，相当于mybatis的主配置文件里的<mappers>标签，
+    告诉mybatis映射文件在哪个包下，而且我把所有的要mybatis实现的接口都放在了dao包下-->
+    <bean id="mapperScanner" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="in2021winter.study.dao"></property>
+    </bean>
+
+    <!--配置spring的声明式事务管理器-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"></property>
+    </bean>
+
+    <!--配置事务通知的相关设置-->
+    <tx:advice id="txAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="find*" read-only="true"/>
+            <tx:method name="*" isolation="DEFAULT"/>
+        </tx:attributes>
+    </tx:advice>
+
+    <!--设置aop增强，并和事务管理器联系起来-->
+    <aop:config>
+        <aop:advisor advice-ref="txAdvice" pointcut="execution(* in2021winter.study.service.*.*(..))"/>
+    </aop:config>
+
+    <!--使用事务管理器必须加上这个配置，否则报错：
+    org.springframework.beans.factory.UnsatisfiedDependencyException：创建名称为'userController'的bean时出错：
+    通过字段'userService'表示的不满足的依赖关系；嵌套异常是org.springframework.beans.factory.BeanNotOfRequiredTypeException：
+    名为“ userService”的Bean的类型应为“ in2021winter.study.service.UserService”，但实际上是“ com.sun.proxy。$ Proxy45”类型-->
+    <aop:aspectj-autoproxy  proxy-target-class="true"/>
+</beans>
